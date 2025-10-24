@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ticktockbent/ape_my/internal/storage"
@@ -478,4 +480,111 @@ func TestFullCRUDWorkflow(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Errorf("Get after delete should return 404, got %d", w.Code)
 	}
+}
+
+func TestConcurrentHTTPRequests(t *testing.T) {
+	server := setupTestServer(t)
+
+	var wg sync.WaitGroup
+	var successfulCreates atomic.Int32
+	var successfulReads atomic.Int32
+	var successfulUpdates atomic.Int32
+	numGoroutines := 10
+	requestsPerGoroutine := 20
+
+	// Concurrent POST requests
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for j := 0; j < requestsPerGoroutine; j++ {
+				body := bytes.NewBufferString(`{"name": "ConcurrentUser", "email": "test@example.com"}`)
+				req := httptest.NewRequest(http.MethodPost, "/users", body)
+				req.Header.Set("Content-Type", "application/json")
+				w := httptest.NewRecorder()
+
+				server.mux.ServeHTTP(w, req)
+
+				if w.Code == http.StatusCreated {
+					successfulCreates.Add(1)
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify creates
+	expectedCreates := int32(numGoroutines * requestsPerGoroutine)
+	if successfulCreates.Load() != expectedCreates {
+		t.Errorf("expected %d successful creates, got %d", expectedCreates, successfulCreates.Load())
+	}
+
+	// Get all created IDs
+	req := httptest.NewRequest(http.MethodGet, "/users", nil)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	var users []map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&users)
+
+	if len(users) != int(expectedCreates) {
+		t.Errorf("expected %d users, got %d", expectedCreates, len(users))
+	}
+
+	// Concurrent READ requests
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < requestsPerGoroutine; j++ {
+				req := httptest.NewRequest(http.MethodGet, "/users", nil)
+				w := httptest.NewRecorder()
+
+				server.mux.ServeHTTP(w, req)
+
+				if w.Code == http.StatusOK {
+					successfulReads.Add(1)
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Verify reads
+	expectedReads := int32(numGoroutines * requestsPerGoroutine)
+	if successfulReads.Load() != expectedReads {
+		t.Errorf("expected %d successful reads, got %d", expectedReads, successfulReads.Load())
+	}
+
+	// Concurrent UPDATE requests on different entities
+	for i := 0; i < numGoroutines && i < len(users); i++ {
+		wg.Add(1)
+		go func(userID string) {
+			defer wg.Done()
+			for j := 0; j < 5; j++ {
+				body := bytes.NewBufferString(`{"name": "UpdatedUser", "email": "updated@example.com"}`)
+				req := httptest.NewRequest(http.MethodPut, "/users/"+userID, body)
+				req.Header.Set("Content-Type", "application/json")
+				w := httptest.NewRecorder()
+
+				server.mux.ServeHTTP(w, req)
+
+				if w.Code == http.StatusOK {
+					successfulUpdates.Add(1)
+				}
+			}
+		}(users[i]["id"].(string))
+	}
+
+	wg.Wait()
+
+	// Verify updates (at least some should succeed)
+	if successfulUpdates.Load() == 0 {
+		t.Error("expected at least some successful updates")
+	}
+
+	t.Logf("Concurrent test stats: Creates=%d, Reads=%d, Updates=%d",
+		successfulCreates.Load(), successfulReads.Load(), successfulUpdates.Load())
 }
