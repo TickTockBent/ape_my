@@ -1,0 +1,48 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "name": "Alice Johnson",
+      "email": "alice@example.com",
+      "age": 30,
+      "active": true
+    },
+    {
+      "id": "2",
+      "name": "Bob Smith",
+      "email": "bob@example.com",
+      "age": 25,
+      "active": true
+    },
+    {
+      "id": "3",
+      "name": "Charlie Brown",
+      "email": "charlie@example.com",
+      "age": 35,
+      "active": false
+    }
+  ],
+  "posts": [
+    {
+      "id": "1",
+      "title": "First Post",
+      "content": "Hello, world! This is my first post.",
+      "published": true,
+      "tags": ["intro", "welcome"]
+    },
+    {
+      "id": "2",
+      "title": "Second Post",
+      "content": "Learning to use Ape_my for mock APIs.",
+      "published": true,
+      "tags": ["tutorial", "api"]
+    },
+    {
+      "id": "3",
+      "title": "Draft Post",
+      "content": "This is still a work in progress.",
+      "published": false,
+      "tags": ["draft"]
+    }
+  ]
+}
