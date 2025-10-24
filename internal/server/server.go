@@ -14,20 +14,22 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	port     int
-	mux      *http.ServeMux
-	store    storage.Store
-	routeMap schema.RouteMap
-	server   *http.Server
+	port      int
+	mux       *http.ServeMux
+	store     storage.Store
+	routeMap  schema.RouteMap
+	validator *Validator
+	server    *http.Server
 }
 
 // New creates a new server instance
-func New(port int, store storage.Store, routeMap schema.RouteMap) *Server {
+func New(port int, store storage.Store, routeMap schema.RouteMap, loader *schema.Loader) *Server {
 	return &Server{
-		port:     port,
-		mux:      http.NewServeMux(),
-		store:    store,
-		routeMap: routeMap,
+		port:      port,
+		mux:       http.NewServeMux(),
+		store:     store,
+		routeMap:  routeMap,
+		validator: NewValidator(loader),
 	}
 }
 

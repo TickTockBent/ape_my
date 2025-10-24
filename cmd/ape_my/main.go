@@ -88,7 +88,7 @@ func main() {
 	}
 
 	// Phase 4: Start HTTP server
-	srv := server.New(config.Port, store, routeMap)
+	srv := server.New(config.Port, store, routeMap, loader)
 	srv.RegisterRoutes()
 
 	log.Printf("\n=== Ape_my is ready! ===")

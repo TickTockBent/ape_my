@@ -3,12 +3,73 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/ticktockbent/ape_my/internal/schema"
 	"github.com/ticktockbent/ape_my/internal/storage"
 )
+
+func setupTestSchema(t *testing.T) *schema.Loader {
+	// Create a temporary schema file for testing
+	schemaData := `{
+		"entities": {
+			"users": {
+				"fields": {
+					"id": {
+						"type": "string",
+						"required": true
+					},
+					"name": {
+						"type": "string",
+						"required": true
+					},
+					"email": {
+						"type": "string",
+						"required": false
+					},
+					"age": {
+						"type": "number",
+						"required": false
+					}
+				},
+				"collectionPath": "/users"
+			},
+			"posts": {
+				"fields": {
+					"id": {
+						"type": "string",
+						"required": true
+					},
+					"title": {
+						"type": "string",
+						"required": true
+					},
+					"content": {
+						"type": "string",
+						"required": false
+					}
+				},
+				"collectionPath": "/posts"
+			}
+		}
+	}`
+
+	// Create temp file
+	tmpFile := t.TempDir() + "/test-schema.json"
+	if err := os.WriteFile(tmpFile, []byte(schemaData), 0644); err != nil {
+		t.Fatalf("failed to create test schema file: %v", err)
+	}
+
+	// Load schema
+	loader := schema.NewLoader()
+	if err := loader.LoadFromFile(tmpFile); err != nil {
+		t.Fatalf("failed to load test schema: %v", err)
+	}
+
+	return loader
+}
 
 func setupTestServer(t *testing.T) *Server {
 	store := storage.NewInMemoryStore()
@@ -27,7 +88,8 @@ func setupTestServer(t *testing.T) *Server {
 		},
 	}
 
-	server := New(8080, store, routeMap)
+	loader := setupTestSchema(t)
+	server := New(8080, store, routeMap, loader)
 	server.RegisterRoutes()
 
 	return server
@@ -36,8 +98,9 @@ func setupTestServer(t *testing.T) *Server {
 func TestNew(t *testing.T) {
 	store := storage.NewInMemoryStore()
 	routeMap := schema.RouteMap{}
+	loader := schema.NewLoader()
 
-	server := New(8080, store, routeMap)
+	server := New(8080, store, routeMap, loader)
 
 	if server == nil {
 		t.Fatal("expected server to not be nil")
@@ -53,6 +116,10 @@ func TestNew(t *testing.T) {
 
 	if server.mux == nil {
 		t.Error("expected mux to not be nil")
+	}
+
+	if server.validator == nil {
+		t.Error("expected validator to not be nil")
 	}
 }
 

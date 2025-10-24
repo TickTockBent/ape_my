@@ -80,6 +80,12 @@ func (s *Server) handleCreate(entityName string, w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Validate against schema
+	if err := s.validator.ValidateCreate(entityName, data); err != nil {
+		s.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	// Create entity in storage
 	id, err := s.store.Create(entityName, data)
 	if err != nil {
@@ -156,6 +162,12 @@ func (s *Server) handleUpdate(entityName string, id string, w http.ResponseWrite
 		return
 	}
 
+	// Validate against schema
+	if err := s.validator.ValidateUpdate(entityName, data); err != nil {
+		s.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	// Update entity in storage
 	err = s.store.Update(entityName, id, data)
 	if err != nil {
@@ -195,6 +207,12 @@ func (s *Server) handlePatch(entityName string, id string, w http.ResponseWriter
 	var data map[string]interface{}
 	if err := json.Unmarshal(body, &data); err != nil {
 		s.respondError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	// Validate against schema (PATCH doesn't require all required fields)
+	if err := s.validator.ValidatePatch(entityName, data); err != nil {
+		s.respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
