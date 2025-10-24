@@ -59,19 +59,19 @@ func TestNew(t *testing.T) {
 func TestRegisterRoutes(t *testing.T) {
 	server := setupTestServer(t)
 
-	// Test that routes respond (even if not fully implemented)
+	// Test that routes respond with CRUD operations
 	tests := []struct {
 		name       string
 		method     string
 		path       string
 		wantStatus int
 	}{
-		{"GET collection", http.MethodGet, "/users", http.StatusNotImplemented},
+		{"GET collection", http.MethodGet, "/users", http.StatusOK},
 		{"POST collection", http.MethodPost, "/users", http.StatusUnsupportedMediaType}, // No Content-Type
-		{"GET item", http.MethodGet, "/users/1", http.StatusNotImplemented},
-		{"PUT item", http.MethodPut, "/users/1", http.StatusUnsupportedMediaType},     // No Content-Type
-		{"PATCH item", http.MethodPatch, "/users/1", http.StatusUnsupportedMediaType}, // No Content-Type
-		{"DELETE item", http.MethodDelete, "/users/1", http.StatusNotImplemented},
+		{"GET item", http.MethodGet, "/users/1", http.StatusNotFound},                   // Entity doesn't exist
+		{"PUT item", http.MethodPut, "/users/1", http.StatusUnsupportedMediaType},       // No Content-Type
+		{"PATCH item", http.MethodPatch, "/users/1", http.StatusUnsupportedMediaType},   // No Content-Type
+		{"DELETE item", http.MethodDelete, "/users/1", http.StatusNotFound},             // Entity doesn't exist
 		{"unknown route", http.MethodGet, "/unknown", http.StatusNotFound},
 	}
 
@@ -119,7 +119,7 @@ func TestMiddleware_ContentType(t *testing.T) {
 			method:      http.MethodPost,
 			path:        "/users",
 			contentType: "application/json",
-			wantStatus:  http.StatusNotImplemented, // Not 415
+			wantStatus:  http.StatusBadRequest, // Empty body
 		},
 		{
 			name:        "POST without content-type",
@@ -140,21 +140,21 @@ func TestMiddleware_ContentType(t *testing.T) {
 			method:      http.MethodPut,
 			path:        "/users/1",
 			contentType: "application/json",
-			wantStatus:  http.StatusNotImplemented, // Not 415
+			wantStatus:  http.StatusBadRequest, // Empty body
 		},
 		{
 			name:        "PATCH with JSON",
 			method:      http.MethodPatch,
 			path:        "/users/1",
 			contentType: "application/json",
-			wantStatus:  http.StatusNotImplemented, // Not 415
+			wantStatus:  http.StatusBadRequest, // Empty body
 		},
 		{
 			name:        "GET doesn't require content-type",
 			method:      http.MethodGet,
 			path:        "/users",
 			contentType: "",
-			wantStatus:  http.StatusNotImplemented, // Not 415
+			wantStatus:  http.StatusOK,
 		},
 	}
 
@@ -186,8 +186,8 @@ func TestHandle404(t *testing.T) {
 		{"root path", "/", http.StatusNotFound},
 		{"unknown path", "/unknown", http.StatusNotFound},
 		{"unknown nested path", "/unknown/nested", http.StatusNotFound},
-		{"valid collection path", "/users", http.StatusNotImplemented}, // Not 404
-		{"valid item path", "/users/123", http.StatusNotImplemented},   // Not 404
+		{"valid collection path", "/users", http.StatusOK},
+		{"valid item path", "/users/123", http.StatusNotFound}, // Entity doesn't exist
 	}
 
 	for _, tt := range tests {
@@ -212,8 +212,8 @@ func TestHandleItem_IDExtraction(t *testing.T) {
 		path       string
 		wantStatus int
 	}{
-		{"valid ID", "/users/123", http.StatusNotImplemented},
-		{"valid alphanumeric ID", "/users/abc-123", http.StatusNotImplemented},
+		{"valid ID", "/users/123", http.StatusNotFound},                  // Entity doesn't exist
+		{"valid alphanumeric ID", "/users/abc-123", http.StatusNotFound}, // Entity doesn't exist
 		{"nested path (invalid)", "/users/123/nested", http.StatusNotFound},
 		{"no ID", "/users/", http.StatusNotFound},
 	}
