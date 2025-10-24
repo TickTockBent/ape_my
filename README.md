@@ -1,5 +1,12 @@
 # Ape_my
 
+[![CI](https://github.com/ticktockbent/ape_my/workflows/CI/badge.svg)](https://github.com/ticktockbent/ape_my/actions)
+[![codecov](https://codecov.io/gh/ticktockbent/ape_my/branch/main/graph/badge.svg)](https://codecov.io/gh/ticktockbent/ape_my)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ticktockbent/ape_my)](https://goreportcard.com/report/github.com/ticktockbent/ape_my)
+[![Go Version](https://img.shields.io/badge/go-1.21%2B-blue)](https://go.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Release](https://img.shields.io/github/v/release/ticktockbent/ape_my)](https://github.com/ticktockbent/ape_my/releases)
+
 > A minimalist mock API server that converts JSON schemas into fully functional REST APIs
 
 Ape_my is a zero-configuration mock API server written in Go. Point it at a JSON schema file, and it instantly generates a stateful RESTful API - perfect for frontend development, testing, and rapid prototyping.
