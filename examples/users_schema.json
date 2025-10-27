@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "users": {
+      "fields": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "name": {
+          "type": "string",
+          "required": true
+        },
+        "email": {
+          "type": "string",
+          "required": true
+        },
+        "age": {
+          "type": "number",
+          "required": false
+        },
+        "active": {
+          "type": "boolean",
+          "required": false
+        }
+      }
+    },
+    "posts": {
+      "fields": {
+        "id": {
+          "type": "string",
+          "required": true
+        },
+        "title": {
+          "type": "string",
+          "required": true
+        },
+        "content": {
+          "type": "string",
+          "required": true
+        },
+        "published": {
+          "type": "boolean",
+          "required": false
+        },
+        "tags": {
+          "type": "array",
+          "required": false
+        }
+      }
+    }
+  }
+}

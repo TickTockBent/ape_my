@@ -1,0 +1,67 @@
+linters-settings:
+  dupl:
+    threshold: 150  # Allow more duplication for similar handler patterns
+  goconst:
+    min-len: 3
+    min-occurrences: 3  # Require 3+ occurrences before suggesting constant
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+      - style
+    disabled-checks:
+      - ifElseChain  # if-else chains are fine for error handling
+      - paramTypeCombine  # Already fixed but optional
+  gocyclo:
+    min-complexity: 15
+  goimports:
+    local-prefixes: github.com/ticktockbent/ape_my
+  govet:
+    shadow: true
+  lll:
+    line-length: 140
+  misspell:
+    locale: US
+  unparam:
+    check-exported: false  # Don't check exported functions
+
+linters:
+  disable-all: true
+  enable:
+    - bodyclose
+    - errcheck
+    - gocyclo
+    - gofmt
+    - goimports
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - stylecheck
+    - typecheck
+    - unused
+    - whitespace
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - goconst
+    # Exclude shadow warnings for short-lived error variables
+    - linters:
+        - govet
+      text: "shadow: declaration of \"err\""
+    # Exclude unparam for test helper functions
+    - path: _test\.go
+      linters:
+        - unparam
+
+run:
+  timeout: 5m
+  tests: true
