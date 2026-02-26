@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"strings"
 )
 
 // RouteInfo holds information about a generated route
@@ -14,6 +15,22 @@ type RouteInfo struct {
 // RouteMap maps entity names to their route information
 type RouteMap map[string]*RouteInfo
 
+// NormalizeBasePath normalizes a base path by ensuring it has a leading slash
+// and no trailing slash. Empty strings are returned as-is (no prefix).
+func NormalizeBasePath(basePath string) string {
+	basePath = strings.TrimSpace(basePath)
+	if basePath == "" {
+		return ""
+	}
+	// Ensure leading slash
+	if !strings.HasPrefix(basePath, "/") {
+		basePath = "/" + basePath
+	}
+	// Remove trailing slash
+	basePath = strings.TrimRight(basePath, "/")
+	return basePath
+}
+
 // BuildRouteMap creates a route map from the loaded schema
 func (l *Loader) BuildRouteMap() (RouteMap, error) {
 	if l.schema == nil {
@@ -21,12 +38,13 @@ func (l *Loader) BuildRouteMap() (RouteMap, error) {
 	}
 
 	routeMap := make(RouteMap)
+	prefix := NormalizeBasePath(l.schema.BasePath)
 
 	for entityName := range l.schema.Entities {
 		routeInfo := &RouteInfo{
 			EntityName:     entityName,
-			CollectionPath: fmt.Sprintf("/%s", entityName),
-			ItemPath:       fmt.Sprintf("/%s/{id}", entityName),
+			CollectionPath: fmt.Sprintf("%s/%s", prefix, entityName),
+			ItemPath:       fmt.Sprintf("%s/%s/{id}", prefix, entityName),
 		}
 		routeMap[entityName] = routeInfo
 	}

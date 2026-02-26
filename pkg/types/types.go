@@ -2,6 +2,7 @@ package types
 
 // Schema represents the entire schema definition
 type Schema struct {
+	BasePath string             `json:"basePath,omitempty"`
 	Entities map[string]*Entity `json:"entities"`
 }
 
