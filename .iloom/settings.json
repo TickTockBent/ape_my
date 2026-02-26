@@ -1,0 +1,39 @@
+{
+  "capabilities": {
+    "web": {
+      "basePort": 5000
+    }
+  },
+  "colors": {
+    "vscode": true
+  },
+  "spin": {
+    "swarmModel": "opus"
+  },
+  "agents": {
+    "iloom-swarm-worker": {
+      "model": "opus"
+    },
+    "iloom-issue-analyzer": {
+      "swarmModel": "opus"
+    },
+    "iloom-issue-planner": {
+      "swarmModel": "opus"
+    },
+    "iloom-issue-implementer": {
+      "swarmModel": "opus"
+    },
+    "iloom-issue-enhancer": {
+      "swarmModel": "opus"
+    },
+    "iloom-issue-analyze-and-plan": {
+      "swarmModel": "opus"
+    },
+    "iloom-code-reviewer": {
+      "swarmModel": "opus"
+    },
+    "iloom-issue-complexity-evaluator": {
+      "swarmModel": "haiku"
+    }
+  }
+}

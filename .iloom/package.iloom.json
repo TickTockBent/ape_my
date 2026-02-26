@@ -1,0 +1,10 @@
+{
+  "capabilities": ["cli", "web"],
+  "scripts": {
+    "install": "go mod download && go mod verify",
+    "build": "go build -o bin/ape_my ./cmd/ape_my",
+    "test": "go test -v -race ./...",
+    "dev": "go run ./cmd/ape_my",
+    "lint": "golangci-lint run --timeout=5m"
+  }
+}
