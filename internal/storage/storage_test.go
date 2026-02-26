@@ -3,6 +3,8 @@ package storage
 import (
 	"sync"
 	"testing"
+
+	"github.com/ticktockbent/ape_my/pkg/types"
 )
 
 func TestNewInMemoryStore(t *testing.T) {
@@ -496,6 +498,135 @@ func TestParseIDNumber(t *testing.T) {
 				t.Errorf("parseIDNumber(%s) = %v, want %v", tt.id, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestListQuery_Filtering(t *testing.T) {
+	store := NewInMemoryStore()
+	store.Initialize([]string{"users"})
+	store.Seed("users", []map[string]interface{}{
+		{"id": "1", "name": "Alice", "email": "alice@example.com"},
+		{"id": "2", "name": "Bob", "email": "bob@example.com"},
+		{"id": "3", "name": "Alice", "email": "alice2@example.com"},
+	})
+
+	tests := []struct {
+		name      string
+		filters   map[string]string
+		wantCount int
+	}{
+		{"no filters", nil, 3},
+		{"filter by name", map[string]string{"name": "Alice"}, 2},
+		{"filter by email", map[string]string{"email": "bob@example.com"}, 1},
+		{"filter by name and email", map[string]string{"name": "Alice", "email": "alice@example.com"}, 1},
+		{"no match", map[string]string{"name": "Nobody"}, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := store.ListQuery("users", types.QueryOpts{Filters: tt.filters})
+			if err != nil {
+				t.Fatalf("ListQuery() error = %v", err)
+			}
+			if len(result.Items) != tt.wantCount {
+				t.Errorf("ListQuery() returned %d items, want %d", len(result.Items), tt.wantCount)
+			}
+			if result.TotalCount != tt.wantCount {
+				t.Errorf("ListQuery() TotalCount = %d, want %d", result.TotalCount, tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestListQuery_OffsetPagination(t *testing.T) {
+	store := NewInMemoryStore()
+	store.Initialize([]string{"users"})
+	for i := 1; i <= 10; i++ {
+		store.Seed("users", []map[string]interface{}{
+			{"id": formatID(i), "name": "User"},
+		})
+	}
+
+	// Get first page
+	result, err := store.ListQuery("users", types.QueryOpts{Limit: 3, Offset: 0})
+	if err != nil {
+		t.Fatalf("ListQuery() error = %v", err)
+	}
+	if len(result.Items) != 3 {
+		t.Errorf("first page: got %d items, want 3", len(result.Items))
+	}
+	if result.TotalCount != 10 {
+		t.Errorf("TotalCount = %d, want 10", result.TotalCount)
+	}
+
+	// Get second page
+	result2, err := store.ListQuery("users", types.QueryOpts{Limit: 3, Offset: 3})
+	if err != nil {
+		t.Fatalf("ListQuery() error = %v", err)
+	}
+	if len(result2.Items) != 3 {
+		t.Errorf("second page: got %d items, want 3", len(result2.Items))
+	}
+
+	// Offset past end
+	result3, err := store.ListQuery("users", types.QueryOpts{Limit: 3, Offset: 100})
+	if err != nil {
+		t.Fatalf("ListQuery() error = %v", err)
+	}
+	if len(result3.Items) != 0 {
+		t.Errorf("past end: got %d items, want 0", len(result3.Items))
+	}
+}
+
+func TestListQuery_CursorPagination(t *testing.T) {
+	store := NewInMemoryStore()
+	store.Initialize([]string{"users"})
+	store.Seed("users", []map[string]interface{}{
+		{"id": "1", "name": "Alice"},
+		{"id": "2", "name": "Bob"},
+		{"id": "3", "name": "Charlie"},
+		{"id": "4", "name": "David"},
+		{"id": "5", "name": "Eve"},
+	})
+
+	// First page: limit 2
+	result, err := store.ListQuery("users", types.QueryOpts{Limit: 2})
+	if err != nil {
+		t.Fatalf("ListQuery() error = %v", err)
+	}
+	if len(result.Items) != 2 {
+		t.Fatalf("first page: got %d items, want 2", len(result.Items))
+	}
+	if result.NextCursor == "" {
+		t.Fatal("expected non-empty NextCursor for first page")
+	}
+
+	// Second page using cursor
+	result2, err := store.ListQuery("users", types.QueryOpts{Limit: 2, Cursor: result.NextCursor})
+	if err != nil {
+		t.Fatalf("ListQuery() error = %v", err)
+	}
+	if len(result2.Items) != 2 {
+		t.Fatalf("second page: got %d items, want 2", len(result2.Items))
+	}
+
+	// Verify no overlap between pages
+	page1IDs := map[string]bool{}
+	for _, item := range result.Items {
+		page1IDs[item["id"].(string)] = true
+	}
+	for _, item := range result2.Items {
+		if page1IDs[item["id"].(string)] {
+			t.Errorf("duplicate ID %s across pages", item["id"])
+		}
+	}
+}
+
+func TestListQuery_EntityTypeNotFound(t *testing.T) {
+	store := NewInMemoryStore()
+	_, err := store.ListQuery("nonexistent", types.QueryOpts{})
+	if err != ErrEntityTypeNotFound {
+		t.Errorf("ListQuery() error = %v, want ErrEntityTypeNotFound", err)
 	}
 }
 

@@ -2,7 +2,12 @@ package storage
 
 import (
 	"errors"
+	"fmt"
+	"sort"
+	"strconv"
 	"sync"
+
+	"github.com/ticktockbent/ape_my/pkg/types"
 )
 
 var (
@@ -23,6 +28,9 @@ type Store interface {
 
 	// List retrieves all entities of a given type
 	List(entityType string) ([]map[string]interface{}, error)
+
+	// ListQuery retrieves entities with filtering, pagination, and cursor support
+	ListQuery(entityType string, opts types.QueryOpts) (*types.QueryResult, error)
 
 	// Update replaces an entire entity
 	Update(entityType string, id string, data map[string]interface{}) error
@@ -134,6 +142,113 @@ func (s *InMemoryStore) List(entityType string) ([]map[string]interface{}, error
 	}
 
 	return entities, nil
+}
+
+// ListQuery retrieves entities with filtering, pagination, and cursor support
+func (s *InMemoryStore) ListQuery(entityType string, opts types.QueryOpts) (*types.QueryResult, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.data[entityType] == nil {
+		return nil, ErrEntityTypeNotFound
+	}
+
+	// Collect all entities sorted by ID for deterministic ordering
+	allIDs := make([]string, 0, len(s.data[entityType]))
+	for id := range s.data[entityType] {
+		allIDs = append(allIDs, id)
+	}
+	sort.Strings(allIDs)
+
+	// Apply filters
+	var filtered []map[string]interface{}
+	for _, id := range allIDs {
+		entity := s.data[entityType][id]
+		if matchesFilters(entity, opts.Filters) {
+			filtered = append(filtered, copyMap(entity))
+		}
+	}
+
+	totalCount := len(filtered)
+
+	// Apply cursor-based pagination: skip to after the cursor ID
+	if opts.Cursor != "" {
+		cursorIndex := -1
+		for i, item := range filtered {
+			if idVal, ok := item["id"].(string); ok && idVal == opts.Cursor {
+				cursorIndex = i
+				break
+			}
+		}
+		if cursorIndex >= 0 && cursorIndex+1 < len(filtered) {
+			filtered = filtered[cursorIndex+1:]
+		} else {
+			filtered = nil
+		}
+	} else if opts.Offset > 0 {
+		// Apply offset-based pagination
+		if opts.Offset >= len(filtered) {
+			filtered = nil
+		} else {
+			filtered = filtered[opts.Offset:]
+		}
+	}
+
+	// Apply limit
+	var nextCursor string
+	if opts.Limit > 0 && len(filtered) > opts.Limit {
+		// There are more results; set next cursor to last returned item's ID
+		filtered = filtered[:opts.Limit]
+		if lastItem := filtered[len(filtered)-1]; lastItem != nil {
+			if id, ok := lastItem["id"].(string); ok {
+				nextCursor = id
+			}
+		}
+	}
+
+	if filtered == nil {
+		filtered = []map[string]interface{}{}
+	}
+
+	return &types.QueryResult{
+		Items:      filtered,
+		TotalCount: totalCount,
+		NextCursor: nextCursor,
+	}, nil
+}
+
+// matchesFilters checks if an entity matches all filter criteria (AND logic)
+func matchesFilters(entity map[string]interface{}, filters map[string]string) bool {
+	for key, filterValue := range filters {
+		entityValue, exists := entity[key]
+		if !exists {
+			return false
+		}
+
+		// Type-coerced comparison
+		switch typedValue := entityValue.(type) {
+		case string:
+			if typedValue != filterValue {
+				return false
+			}
+		case float64:
+			filterNum, err := strconv.ParseFloat(filterValue, 64)
+			if err != nil || typedValue != filterNum {
+				return false
+			}
+		case bool:
+			filterBool, err := strconv.ParseBool(filterValue)
+			if err != nil || typedValue != filterBool {
+				return false
+			}
+		default:
+			// For non-primitive types, compare string representation
+			if fmt.Sprintf("%v", entityValue) != filterValue {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // Update replaces an entire entity
