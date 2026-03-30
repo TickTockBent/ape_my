@@ -1,0 +1,53 @@
+{
+  "basePath": "/api/v1",
+  "auth": {
+    "token": "dev-token-123"
+  },
+  "responseHeaders": {
+    "X-API-Version": "1.0",
+    "X-Powered-By": "ape_my"
+  },
+  "responseWrapper": {
+    "single": { "data": "$entity" },
+    "list": { "data": "$entities", "meta": { "count": "$count" } }
+  },
+  "pagination": {
+    "style": "cursor",
+    "defaultLimit": 10,
+    "maxLimit": 50
+  },
+  "entities": {
+    "users": {
+      "fields": {
+        "id": { "type": "string", "required": true },
+        "name": { "type": "string", "required": true },
+        "email": { "type": "string", "required": true },
+        "role": { "type": "string", "required": false }
+      }
+    },
+    "posts": {
+      "fields": {
+        "id": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "body": { "type": "string", "required": false },
+        "author_id": { "type": "string", "required": false },
+        "published": { "type": "boolean", "required": false },
+        "tags": { "type": "array", "required": false }
+      }
+    }
+  },
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/users/:userId/posts",
+      "entity": "posts",
+      "filters": { "userId": "author_id" }
+    },
+    {
+      "method": "GET",
+      "path": "/users/me",
+      "entity": "users",
+      "filters": { "id": "1" }
+    }
+  ]
+}

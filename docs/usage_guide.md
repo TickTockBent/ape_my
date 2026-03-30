@@ -320,7 +320,7 @@ You can define multiple entities in a single schema:
         "id": {"type": "string", "required": true},
         "title": {"type": "string", "required": true},
         "content": {"type": "string", "required": true},
-        "authorId": {"type": "string", "required": false}
+        "author_id": {"type": "string", "required": false}
       }
     }
   }
@@ -331,26 +331,136 @@ This creates:
 - `/users` and `/users/:id` endpoints
 - `/posts` and `/posts/:id` endpoints
 
-### Field Types
+### Base Path Prefix
 
-Ape_my supports all JSON types:
+Mount all routes under a common prefix:
 
 ```json
 {
-  "entities": {
-    "examples": {
-      "fields": {
-        "id": {"type": "string", "required": true},
-        "text": {"type": "string", "required": false},
-        "count": {"type": "number", "required": false},
-        "enabled": {"type": "boolean", "required": false},
-        "metadata": {"type": "object", "required": false},
-        "tags": {"type": "array", "required": false}
-      }
-    }
+  "basePath": "/api/v2",
+  "entities": { ... }
+}
+```
+
+Routes become `/api/v2/users`, `/api/v2/posts`, etc.
+
+### Query Parameter Filtering
+
+Filter list results by passing field names as query parameters:
+
+```bash
+# Filter by a single field
+curl http://localhost:8080/users?name=Alice
+
+# Filter by multiple fields (AND logic)
+curl http://localhost:8080/users?active=true&age=30
+
+# Unknown params are ignored
+curl http://localhost:8080/users?unknown=value
+```
+
+### Pagination
+
+Enable pagination by adding a `pagination` config to your schema.
+
+**Cursor-based pagination:**
+
+```json
+{ "pagination": { "style": "cursor", "defaultLimit": 10, "maxLimit": 50 } }
+```
+
+```bash
+# First page
+curl http://localhost:8080/users?limit=10
+
+# Next page (use next_token from previous response)
+curl http://localhost:8080/users?limit=10&cursor=abc123
+```
+
+**Offset-based pagination:**
+
+```json
+{ "pagination": { "style": "offset", "defaultLimit": 10, "maxLimit": 50 } }
+```
+
+```bash
+curl http://localhost:8080/users?limit=10&offset=0   # Page 1
+curl http://localhost:8080/users?limit=10&offset=10   # Page 2
+```
+
+### Authentication Simulation
+
+Add Bearer token auth to all endpoints:
+
+```json
+{ "auth": { "token": "my-secret-token" } }
+```
+
+All requests must include the header:
+
+```bash
+curl -H "Authorization: Bearer my-secret-token" http://localhost:8080/users
+```
+
+Requests without the correct token receive `401 Unauthorized`.
+
+### Response Wrappers
+
+Wrap responses in an envelope structure using template variables (`$entity`, `$entities`, `$count`, `$next_token`):
+
+```json
+{
+  "responseWrapper": {
+    "single": { "data": "$entity" },
+    "list": { "data": "$entities", "meta": { "count": "$count" } }
   }
 }
 ```
+
+A GET to `/users` would return:
+```json
+{ "data": [...], "meta": { "count": 3 } }
+```
+
+### Custom Response Headers
+
+Add headers to every response:
+
+```json
+{
+  "responseHeaders": {
+    "X-Rate-Limit-Limit": "100",
+    "X-Powered-By": "ape_my"
+  }
+}
+```
+
+`Content-Type` and `Content-Length` are protected and cannot be overridden.
+
+### Custom Route Patterns
+
+Define nested resource routes and aliases:
+
+```json
+{
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/users/:userId/posts",
+      "entity": "posts",
+      "filters": { "userId": "author_id" }
+    },
+    {
+      "method": "GET",
+      "path": "/users/me",
+      "entity": "users",
+      "filters": { "id": "1" }
+    }
+  ]
+}
+```
+
+Path parameters (`:userId`) are extracted and used as filters against the target entity. Custom routes respect `basePath`.
 
 ### Auto-generated IDs
 
@@ -359,18 +469,14 @@ If you don't provide an `id` field when creating an entity, Ape_my will generate
 ```bash
 curl -X POST http://localhost:8080/todos \
   -H "Content-Type: application/json" \
-  -d '{
-    "task": "Auto-generated ID example"
-  }'
+  -d '{"task": "Auto-generated ID example"}'
 ```
 
 **Response**:
 ```json
 {
   "id": "4",
-  "task": "Auto-generated ID example",
-  "completed": null,
-  "priority": null
+  "task": "Auto-generated ID example"
 }
 ```
 
@@ -551,8 +657,6 @@ Keep your schema files in version control and track changes over time.
 ## Next Steps
 
 - Explore the [Schema Format Documentation](schema_format.md)
-- Check out the [API Reference](api_reference.md)
-- Read about the [Development Roadmap](build_plan_v0.1.0.md)
 - Contribute to the project on [GitHub](https://github.com/ticktockbent/ape_my)
 
 ---

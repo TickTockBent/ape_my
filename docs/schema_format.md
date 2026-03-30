@@ -10,6 +10,14 @@ Ape_my uses a simple JSON schema format to define the entities and their fields 
 
 ```json
 {
+  "basePath": "/api/v1",
+  "auth": { "token": "my-secret" },
+  "responseHeaders": { "X-Custom": "value" },
+  "responseWrapper": {
+    "single": { "data": "$entity" },
+    "list": { "data": "$entities", "meta": { "count": "$count" } }
+  },
+  "pagination": { "style": "cursor", "defaultLimit": 20, "maxLimit": 100 },
   "entities": {
     "entityName": {
       "fields": {
@@ -19,9 +27,14 @@ Ape_my uses a simple JSON schema format to define the entities and their fields 
         }
       }
     }
-  }
+  },
+  "routes": [
+    { "method": "GET", "path": "/parent/:parentId/children", "entity": "children", "filters": { "parentId": "parent_id" } }
+  ]
 }
 ```
+
+All top-level properties except `entities` are optional.
 
 ---
 
@@ -173,69 +186,186 @@ Seed data uses a simple JSON structure matching your schema:
 
 ---
 
+## Top-Level Configuration Properties
+
+### `basePath` (optional)
+
+Prefixes all generated routes with a common path. Useful for versioned APIs.
+
+```json
+{ "basePath": "/api/v2" }
+```
+
+With this set, a `users` entity generates routes at `/api/v2/users` instead of `/users`.
+
+### `auth` (optional)
+
+Enables Bearer token authentication on all endpoints. Requests without the correct token receive `401 Unauthorized`.
+
+```json
+{ "auth": { "token": "my-secret-token" } }
+```
+
+Clients must include the header: `Authorization: Bearer my-secret-token`
+
+### `responseHeaders` (optional)
+
+Adds custom HTTP headers to every response. Protected headers (`Content-Type`, `Content-Length`) cannot be overridden.
+
+```json
+{
+  "responseHeaders": {
+    "X-Rate-Limit-Limit": "100",
+    "X-Powered-By": "ape_my"
+  }
+}
+```
+
+### `responseWrapper` (optional)
+
+Wraps responses in an envelope structure. Supports template variables:
+
+| Variable | Description | Available in |
+|----------|-------------|--------------|
+| `$entity` | The single entity object | `single` |
+| `$entities` | The array of entities | `list` |
+| `$count` | Number of items returned | `list` |
+| `$next_token` | Cursor for next page (if pagination enabled) | `list` |
+
+```json
+{
+  "responseWrapper": {
+    "single": { "data": "$entity", "success": true },
+    "list": { "data": "$entities", "meta": { "result_count": "$count" } }
+  }
+}
+```
+
+### `pagination` (optional)
+
+Enables pagination on list endpoints. Two styles are supported:
+
+**Cursor-based:**
+```json
+{
+  "pagination": {
+    "style": "cursor",
+    "defaultLimit": 20,
+    "maxLimit": 100
+  }
+}
+```
+Clients paginate with `?limit=N&cursor=<next_token>`.
+
+**Offset-based:**
+```json
+{
+  "pagination": {
+    "style": "offset",
+    "defaultLimit": 20,
+    "maxLimit": 100
+  }
+}
+```
+Clients paginate with `?limit=N&offset=M`.
+
+### `routes` (optional)
+
+Defines custom route patterns for nested resources, aliases, or filtered views. Path parameters use `:param` syntax.
+
+```json
+{
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/users/:userId/posts",
+      "entity": "posts",
+      "filters": { "userId": "author_id" }
+    },
+    {
+      "method": "GET",
+      "path": "/users/me",
+      "entity": "users",
+      "filters": { "id": "1" }
+    }
+  ]
+}
+```
+
+In the first route, `:userId` is extracted from the path and used to filter `posts` where `author_id` matches. In the second, `/users/me` is an alias that always returns the user with `id: "1"`.
+
+Custom routes respect `basePath` — if `basePath` is `/api/v2`, the route becomes `/api/v2/users/:userId/posts`.
+
+---
+
+## Query Parameter Filtering
+
+List endpoints automatically support filtering by entity field names as query parameters:
+
+```bash
+GET /users?name=Alice          # Filter by name
+GET /users?active=true         # Filter by boolean
+GET /users?age=30              # Filter by number
+GET /users?name=Alice&age=30   # Multiple filters (AND logic)
+```
+
+Only parameters matching defined field names are used as filters. Unknown parameters are ignored.
+
+---
+
 ## Validation Rules
 
-### v0.1.0 MVP
-
-1. **Required Fields**: When `required: true`, the field must be present in POST requests
-2. **Type Checking**: Basic type validation (string vs number vs boolean)
-3. **ID Generation**: If `id` field is not provided, Ape_my generates a unique ID automatically
-
-### Future Enhancements (post-MVP)
-
-- Custom validation rules (min/max, regex patterns)
-- Default values
-- Field relationships (foreign keys)
-- Enum types
-- Format validation (email, URL, date)
+1. **Required Fields**: When `required: true`, the field must be present in POST and PUT requests. PATCH does not require all fields.
+2. **Type Checking**: Values are validated against their declared type (string, number, boolean, object, array).
+3. **ID Generation**: If `id` field is not provided on POST, Ape_my generates a unique sequential ID.
+4. **Extra Fields**: Fields not in the schema are accepted (for flexibility) but not validated.
+5. **Request Size**: Request bodies are limited to 1MB.
 
 ---
 
 ## Complete Example
 
-**schema.json**:
+A full-featured schema demonstrating all capabilities:
+
 ```json
 {
+  "basePath": "/api/v1",
+  "auth": { "token": "dev-token-123" },
+  "responseHeaders": {
+    "X-API-Version": "1.0"
+  },
+  "responseWrapper": {
+    "single": { "data": "$entity" },
+    "list": { "data": "$entities", "meta": { "count": "$count" } }
+  },
+  "pagination": {
+    "style": "cursor",
+    "defaultLimit": 10,
+    "maxLimit": 50
+  },
   "entities": {
-    "todos": {
+    "users": {
       "fields": {
-        "id": {
-          "type": "string",
-          "required": true
-        },
-        "task": {
-          "type": "string",
-          "required": true
-        },
-        "completed": {
-          "type": "boolean",
-          "required": false
-        },
-        "priority": {
-          "type": "number",
-          "required": false
-        }
+        "id": { "type": "string", "required": true },
+        "name": { "type": "string", "required": true },
+        "email": { "type": "string", "required": true }
+      }
+    },
+    "posts": {
+      "fields": {
+        "id": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "body": { "type": "string", "required": false },
+        "author_id": { "type": "string", "required": false }
       }
     }
-  }
-}
-```
-
-**seed.json** (optional):
-```json
-{
-  "todos": [
+  },
+  "routes": [
     {
-      "id": "1",
-      "task": "Buy groceries",
-      "completed": false,
-      "priority": 2
-    },
-    {
-      "id": "2",
-      "task": "Walk the dog",
-      "completed": true,
-      "priority": 1
+      "method": "GET",
+      "path": "/users/:userId/posts",
+      "entity": "posts",
+      "filters": { "userId": "author_id" }
     }
   ]
 }
@@ -243,9 +373,11 @@ Seed data uses a simple JSON structure matching your schema:
 
 **Usage**:
 ```bash
-go ape_my schema.json with seed.json on 3000
+ape_my schema.json with seed.json on 3000
 ```
 
-This will start a server on port 3000 with:
-- `/todos` endpoints (POST, GET, PUT, PATCH, DELETE)
-- Pre-populated with 2 todo items from seed.json
+This starts a server on port 3000 with:
+- Bearer token auth required on all requests
+- Routes at `/api/v1/users`, `/api/v1/posts`, `/api/v1/users/:userId/posts`
+- Cursor pagination with default limit of 10
+- Wrapped responses with `data` and `meta` keys

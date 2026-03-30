@@ -1,0 +1,12 @@
+{
+  "users": [
+    { "id": "1", "name": "Alice", "email": "alice@example.com", "role": "admin" },
+    { "id": "2", "name": "Bob", "email": "bob@example.com", "role": "user" },
+    { "id": "3", "name": "Charlie", "email": "charlie@example.com", "role": "user" }
+  ],
+  "posts": [
+    { "id": "1", "title": "Getting Started", "body": "Welcome to the API.", "author_id": "1", "published": true, "tags": ["intro", "guide"] },
+    { "id": "2", "title": "Advanced Tips", "body": "Here are some tips.", "author_id": "1", "published": true, "tags": ["tips"] },
+    { "id": "3", "title": "Draft Post", "body": "Work in progress.", "author_id": "2", "published": false, "tags": [] }
+  ]
+}

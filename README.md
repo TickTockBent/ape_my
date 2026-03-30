@@ -13,12 +13,19 @@ Ape_my is a zero-configuration mock API server written in Go. Point it at a JSON
 
 ## Features
 
-- **Zero Configuration**: Just run `go ape_my schema.json` and you're done
+- **Zero Configuration**: Just run `ape_my schema.json` and you're done
 - **Stateful by Default**: In-memory storage with full CRUD operations
 - **Natural Language Commands**: Intuitive CLI syntax
 - **Auto-generated Routes**: RESTful endpoints created from your schema
 - **Optional Seed Data**: Start with pre-populated data
 - **Single Binary**: No dependencies, just download and run
+- **Query Parameter Filtering**: Filter list endpoints by field values
+- **Pagination**: Cursor-based and offset-based pagination with configurable limits
+- **Auth Simulation**: Bearer token authentication middleware
+- **Response Wrappers**: Configurable response envelopes with template variables
+- **Custom Response Headers**: Add headers like rate-limit info to all responses
+- **Custom Route Patterns**: Define nested resource routes and aliases with path parameter extraction
+- **Base Path Prefix**: Mount all routes under a common prefix (e.g., `/api/v2`)
 
 ## Quick Start
 
@@ -127,7 +134,9 @@ Ape_my returns proper HTTP status codes:
 - `201 Created` - Successful POST
 - `204 No Content` - Successful DELETE
 - `400 Bad Request` - Invalid request body or validation error
+- `401 Unauthorized` - Missing or invalid auth token (when auth is configured)
 - `404 Not Found` - Entity or endpoint not found
+- `415 Unsupported Media Type` - Missing `Content-Type: application/json` on POST/PUT/PATCH
 - `500 Internal Server Error` - Server error
 
 ## Project Status
@@ -161,15 +170,21 @@ Ape_my is designed to be:
 
 ## Roadmap
 
-See [docs/build_plan_v0.1.0.md](docs/build_plan_v0.1.0.md) for detailed development phases.
+Features implemented beyond the v0.1.0 MVP:
+- Query parameter filtering
+- Cursor and offset pagination
+- Bearer token auth simulation
+- Response envelope/wrapper templates
+- Custom response headers
+- Custom route patterns with path parameter extraction
+- Base path prefix support
 
-Future enhancements beyond v0.1.0 may include:
-- Query parameters and filtering
-- Pagination support
+Future enhancements may include:
 - Entity relationships
-- Custom validation rules
+- Custom validation rules (min/max, regex, enums)
 - OpenAPI/Swagger documentation generation
 - CORS configuration
+- Persistent storage option
 
 ## Support
 
