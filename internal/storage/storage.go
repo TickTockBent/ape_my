@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -291,8 +292,9 @@ func (s *InMemoryStore) Patch(entityType, id string, data map[string]interface{}
 		return ErrNotFound
 	}
 
-	// Merge the data
-	for key, value := range data {
+	// Merge the data (deep copy to prevent shared references)
+	patchData := copyMap(data)
+	for key, value := range patchData {
 		// Don't allow changing the ID
 		if key != "id" {
 			entity[key] = value
@@ -362,44 +364,24 @@ func (s *InMemoryStore) Seed(entityType string, entities []map[string]interface{
 
 // Helper functions
 
-// copyMap creates a deep copy of a map
+// copyMap creates a deep copy of a map using JSON round-trip
 func copyMap(src map[string]interface{}) map[string]interface{} {
-	dst := make(map[string]interface{}, len(src))
-	for key, value := range src {
-		dst[key] = value
-	}
+	encoded, _ := json.Marshal(src)
+	var dst map[string]interface{}
+	_ = json.Unmarshal(encoded, &dst)
 	return dst
 }
 
 // formatID formats an integer counter into a string ID
 func formatID(counter int) string {
-	// Simple numeric string conversion
-	if counter < 10 {
-		return string(rune('0' + counter))
-	}
-	// For larger numbers, use string conversion
-	var result []byte
-	for counter > 0 {
-		result = append([]byte{byte('0' + (counter % 10))}, result...)
-		counter /= 10
-	}
-	return string(result)
+	return strconv.Itoa(counter)
 }
 
 // parseIDNumber attempts to parse a numeric ID from a string
 func parseIDNumber(id string) int {
-	// Simple parsing for numeric IDs (e.g., "1", "2", "3")
-	if len(id) == 1 && id[0] >= '0' && id[0] <= '9' {
-		return int(id[0] - '0')
-	}
-	// For multi-digit or non-numeric IDs, return 0
-	var num int
-	for _, ch := range id {
-		if ch >= '0' && ch <= '9' {
-			num = num*10 + int(ch-'0')
-		} else {
-			return 0
-		}
+	num, err := strconv.Atoi(id)
+	if err != nil {
+		return 0
 	}
 	return num
 }

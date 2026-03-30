@@ -2,6 +2,8 @@ package server
 
 import (
 	"testing"
+
+	"github.com/ticktockbent/ape_my/pkg/types"
 )
 
 func TestValidateCreate(t *testing.T) {
@@ -216,9 +218,9 @@ func TestValidateFieldType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateFieldType(tt.expectedType, tt.value)
+			err := types.ValidateFieldType(tt.expectedType, tt.value)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("validateFieldType() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ValidateFieldType() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

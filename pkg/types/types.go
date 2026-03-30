@@ -1,5 +1,7 @@
 package types
 
+import "fmt"
+
 // Schema represents the entire schema definition
 type Schema struct {
 	BasePath        string                `json:"basePath,omitempty"`
@@ -56,6 +58,41 @@ const (
 	FieldTypeObject  = "object"
 	FieldTypeArray   = "array"
 )
+
+// ValidateFieldType validates that a value matches the expected field type.
+// Returns nil for null values. Returns an error for unknown types.
+func ValidateFieldType(expectedType string, value interface{}) error {
+	if value == nil {
+		return nil
+	}
+
+	switch expectedType {
+	case FieldTypeString:
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("expected string, got %T", value)
+		}
+	case FieldTypeNumber:
+		if _, ok := value.(float64); !ok {
+			return fmt.Errorf("expected number, got %T", value)
+		}
+	case FieldTypeBoolean:
+		if _, ok := value.(bool); !ok {
+			return fmt.Errorf("expected boolean, got %T", value)
+		}
+	case FieldTypeObject:
+		if _, ok := value.(map[string]interface{}); !ok {
+			return fmt.Errorf("expected object, got %T", value)
+		}
+	case FieldTypeArray:
+		if _, ok := value.([]interface{}); !ok {
+			return fmt.Errorf("expected array, got %T", value)
+		}
+	default:
+		return fmt.Errorf("unknown field type: %s", expectedType)
+	}
+
+	return nil
+}
 
 // QueryOpts defines options for querying entities from storage
 type QueryOpts struct {

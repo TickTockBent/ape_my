@@ -260,7 +260,7 @@ func TestPatch(t *testing.T) {
 	store.Initialize([]string{"users"})
 
 	// Create a test entity
-	testData := map[string]interface{}{"name": "Alice", "email": "alice@example.com", "age": 30}
+	testData := map[string]interface{}{"name": "Alice", "email": "alice@example.com", "age": float64(30)}
 	id, _ := store.Create("users", testData)
 
 	tests := []struct {
@@ -274,7 +274,7 @@ func TestPatch(t *testing.T) {
 			name:       "patch existing entity",
 			entityType: "users",
 			id:         id,
-			data:       map[string]interface{}{"age": 31}, // Only update age
+			data:       map[string]interface{}{"age": float64(31)}, // Only update age
 			wantErr:    false,
 		},
 		{
