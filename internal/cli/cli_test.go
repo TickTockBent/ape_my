@@ -295,6 +295,48 @@ func TestConfigString(t *testing.T) {
 	}
 }
 
+func TestPrintHelp(t *testing.T) {
+	// Redirect stderr to capture output
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	PrintHelp()
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	buf := make([]byte, 4096)
+	n, _ := r.Read(buf)
+	output := string(buf[:n])
+
+	if !contains(output, "ape_my") {
+		t.Error("expected help output to contain 'ape_my'")
+	}
+	if !contains(output, "USAGE") {
+		t.Error("expected help output to contain 'USAGE'")
+	}
+}
+
+func TestPrintVersion(t *testing.T) {
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	PrintVersion()
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	buf := make([]byte, 1024)
+	n, _ := r.Read(buf)
+	output := string(buf[:n])
+
+	if !contains(output, Version) {
+		t.Errorf("expected version output to contain %q, got %q", Version, output)
+	}
+}
+
 // Helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||

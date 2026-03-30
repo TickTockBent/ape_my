@@ -369,6 +369,129 @@ func TestBuildRouteMap(t *testing.T) {
 	}
 }
 
+func TestLoadFromFile_FileNotFound(t *testing.T) {
+	loader := NewLoader()
+	err := loader.LoadFromFile("/nonexistent/path/schema.json")
+	if err == nil {
+		t.Error("expected error for non-existent file")
+	}
+}
+
+func TestValidate_NilSchema(t *testing.T) {
+	loader := NewLoader()
+	err := loader.Validate()
+	if err == nil {
+		t.Error("expected error for nil schema")
+	}
+}
+
+func TestValidateEntity_NilEntity(t *testing.T) {
+	loader := NewLoader()
+	err := loader.validateEntity("test", nil)
+	if err == nil {
+		t.Error("expected error for nil entity")
+	}
+}
+
+func TestValidateEntity_NoFields(t *testing.T) {
+	loader := NewLoader()
+	err := loader.validateEntity("test", &types.Entity{Fields: map[string]*types.Field{}})
+	if err != ErrNoFields {
+		t.Errorf("expected ErrNoFields, got %v", err)
+	}
+}
+
+func TestValidateEntity_NonStringID(t *testing.T) {
+	loader := NewLoader()
+	entity := &types.Entity{
+		Fields: map[string]*types.Field{
+			"id": {Type: types.FieldTypeNumber, Required: true},
+		},
+	}
+	err := loader.validateEntity("test", entity)
+	if err == nil {
+		t.Error("expected error for non-string id field")
+	}
+}
+
+func TestValidateField_NilField(t *testing.T) {
+	loader := NewLoader()
+	err := loader.validateField("test", nil)
+	if err == nil {
+		t.Error("expected error for nil field")
+	}
+}
+
+func TestGetSchema(t *testing.T) {
+	loader := NewLoader()
+	if loader.GetSchema() != nil {
+		t.Error("expected nil schema for new loader")
+	}
+
+	loader.schema = &types.Schema{Entities: map[string]*types.Entity{}}
+	if loader.GetSchema() == nil {
+		t.Error("expected non-nil schema after setting")
+	}
+}
+
+func TestGetEntityNames_NilSchema(t *testing.T) {
+	loader := NewLoader()
+	names := loader.GetEntityNames()
+	if names != nil {
+		t.Errorf("expected nil for nil schema, got %v", names)
+	}
+}
+
+func TestGetEntity_NilSchema(t *testing.T) {
+	loader := NewLoader()
+	_, exists := loader.GetEntity("users")
+	if exists {
+		t.Error("expected entity to not exist when schema is nil")
+	}
+}
+
+func TestValidateSeedData_NilSchema(t *testing.T) {
+	loader := NewLoader()
+	err := loader.ValidateSeedData(map[string][]map[string]interface{}{})
+	if err == nil {
+		t.Error("expected error for nil schema")
+	}
+}
+
+func TestBuildRouteMap_NilSchema(t *testing.T) {
+	loader := NewLoader()
+	_, err := loader.BuildRouteMap()
+	if err == nil {
+		t.Error("expected error for nil schema")
+	}
+}
+
+func TestGetRoutes(t *testing.T) {
+	routeMap := RouteMap{
+		"users": {EntityName: "users", CollectionPath: "/users", ItemPath: "/users/{id}"},
+		"posts": {EntityName: "posts", CollectionPath: "/posts", ItemPath: "/posts/{id}"},
+	}
+	routes := routeMap.GetRoutes()
+	if len(routes) != 2 {
+		t.Errorf("GetRoutes() returned %d routes, want 2", len(routes))
+	}
+}
+
+func TestGetRouteInfo_NotFound(t *testing.T) {
+	routeMap := RouteMap{}
+	_, exists := routeMap.GetRouteInfo("nonexistent")
+	if exists {
+		t.Error("expected route to not exist")
+	}
+}
+
+func TestLoadSeedData_FileNotFound(t *testing.T) {
+	_, err := LoadSeedData("/nonexistent/path/seed.json")
+	if err == nil {
+		t.Error("expected error for non-existent file")
+	}
+}
+
 func TestValidateFieldValue(t *testing.T) {
 	tests := []struct {
 		name      string

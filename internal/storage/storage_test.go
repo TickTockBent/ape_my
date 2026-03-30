@@ -622,6 +622,198 @@ func TestListQuery_CursorPagination(t *testing.T) {
 	}
 }
 
+func TestMatchesFilters_TypeCoercion(t *testing.T) {
+	tests := []struct {
+		name    string
+		entity  map[string]interface{}
+		filters map[string]string
+		want    bool
+	}{
+		{
+			name:    "float64 match",
+			entity:  map[string]interface{}{"age": float64(30)},
+			filters: map[string]string{"age": "30"},
+			want:    true,
+		},
+		{
+			name:    "float64 no match",
+			entity:  map[string]interface{}{"age": float64(30)},
+			filters: map[string]string{"age": "31"},
+			want:    false,
+		},
+		{
+			name:    "float64 invalid filter value",
+			entity:  map[string]interface{}{"age": float64(30)},
+			filters: map[string]string{"age": "not_a_number"},
+			want:    false,
+		},
+		{
+			name:    "bool true match",
+			entity:  map[string]interface{}{"active": true},
+			filters: map[string]string{"active": "true"},
+			want:    true,
+		},
+		{
+			name:    "bool false match",
+			entity:  map[string]interface{}{"active": false},
+			filters: map[string]string{"active": "false"},
+			want:    true,
+		},
+		{
+			name:    "bool no match",
+			entity:  map[string]interface{}{"active": true},
+			filters: map[string]string{"active": "false"},
+			want:    false,
+		},
+		{
+			name:    "bool invalid filter value",
+			entity:  map[string]interface{}{"active": true},
+			filters: map[string]string{"active": "not_a_bool"},
+			want:    false,
+		},
+		{
+			name:    "non-primitive type uses fmt.Sprintf",
+			entity:  map[string]interface{}{"tags": []interface{}{"a", "b"}},
+			filters: map[string]string{"tags": "[a b]"},
+			want:    true,
+		},
+		{
+			name:    "non-primitive type no match",
+			entity:  map[string]interface{}{"tags": []interface{}{"a", "b"}},
+			filters: map[string]string{"tags": "wrong"},
+			want:    false,
+		},
+		{
+			name:    "missing field",
+			entity:  map[string]interface{}{"name": "Alice"},
+			filters: map[string]string{"email": "alice@example.com"},
+			want:    false,
+		},
+		{
+			name:    "empty filters match everything",
+			entity:  map[string]interface{}{"name": "Alice"},
+			filters: map[string]string{},
+			want:    true,
+		},
+		{
+			name:    "nil filters match everything",
+			entity:  map[string]interface{}{"name": "Alice"},
+			filters: nil,
+			want:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchesFilters(tt.entity, tt.filters)
+			if got != tt.want {
+				t.Errorf("matchesFilters() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSeed_EdgeCases(t *testing.T) {
+	store := NewInMemoryStore()
+	store.Initialize([]string{"users"})
+
+	seedData := []map[string]interface{}{
+		{"id": "1", "name": "Alice"},
+		{"name": "NoID"},                          // Missing "id" — should be skipped
+		{"id": float64(123), "name": "NumericID"}, // Non-string ID — should be skipped
+		{"id": "5", "name": "Eve"},
+	}
+
+	err := store.Seed("users", seedData)
+	if err != nil {
+		t.Fatalf("Seed() error = %v", err)
+	}
+
+	// Only entities with valid string IDs should be stored
+	entities, _ := store.List("users")
+	if len(entities) != 2 {
+		t.Errorf("Seed() stored %d entities, want 2", len(entities))
+	}
+
+	// Counter should be updated to 5 (highest numeric ID)
+	newID, _ := store.Create("users", map[string]interface{}{"name": "New"})
+	if newID != "6" {
+		t.Errorf("Create() after Seed() = %q, want %q", newID, "6")
+	}
+}
+
+func TestSeed_NonExistentEntityType(t *testing.T) {
+	store := NewInMemoryStore()
+	err := store.Seed("nonexistent", []map[string]interface{}{{"id": "1"}})
+	if err != ErrEntityTypeNotFound {
+		t.Errorf("Seed() error = %v, want ErrEntityTypeNotFound", err)
+	}
+}
+
+func TestApplyPagination(t *testing.T) {
+	items := []map[string]interface{}{
+		{"id": "1"}, {"id": "2"}, {"id": "3"}, {"id": "4"}, {"id": "5"},
+	}
+
+	tests := []struct {
+		name      string
+		opts      types.QueryOpts
+		wantCount int
+		wantNil   bool
+	}{
+		{"no pagination", types.QueryOpts{}, 5, false},
+		{"cursor at middle", types.QueryOpts{Cursor: "2"}, 3, false},
+		{"cursor at end", types.QueryOpts{Cursor: "5"}, 0, true},
+		{"cursor not found", types.QueryOpts{Cursor: "999"}, 0, true},
+		{"offset 2", types.QueryOpts{Offset: 2}, 3, false},
+		{"offset past end", types.QueryOpts{Offset: 100}, 0, true},
+		{"offset 0 (no-op)", types.QueryOpts{Offset: 0}, 5, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := applyPagination(items, tt.opts)
+			if tt.wantNil && result != nil {
+				t.Errorf("applyPagination() = %v, want nil", result)
+			}
+			if !tt.wantNil && len(result) != tt.wantCount {
+				t.Errorf("applyPagination() returned %d items, want %d", len(result), tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestApplyLimit(t *testing.T) {
+	items := []map[string]interface{}{
+		{"id": "1"}, {"id": "2"}, {"id": "3"},
+	}
+
+	tests := []struct {
+		name       string
+		limit      int
+		wantCount  int
+		wantCursor string
+	}{
+		{"limit 0 (disabled)", 0, 3, ""},
+		{"limit greater than items", 10, 3, ""},
+		{"limit equal to items", 3, 3, ""},
+		{"limit less than items", 2, 2, "2"},
+		{"limit 1", 1, 1, "1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, cursor := applyLimit(items, tt.limit)
+			if len(result) != tt.wantCount {
+				t.Errorf("applyLimit() returned %d items, want %d", len(result), tt.wantCount)
+			}
+			if cursor != tt.wantCursor {
+				t.Errorf("applyLimit() cursor = %q, want %q", cursor, tt.wantCursor)
+			}
+		})
+	}
+}
+
 func TestListQuery_EntityTypeNotFound(t *testing.T) {
 	store := NewInMemoryStore()
 	_, err := store.ListQuery("nonexistent", types.QueryOpts{})

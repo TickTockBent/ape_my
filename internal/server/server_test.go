@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ticktockbent/ape_my/internal/schema"
 	"github.com/ticktockbent/ape_my/internal/storage"
@@ -936,6 +938,363 @@ func TestCustomRouteMethodRestriction(t *testing.T) {
 	}
 }
 
+func TestRespondJSON_NilData(t *testing.T) {
+	server := setupTestServer(t)
+	w := httptest.NewRecorder()
+	server.respondJSON(w, http.StatusNoContent, nil)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+	if w.Body.Len() != 0 {
+		t.Errorf("body should be empty, got %q", w.Body.String())
+	}
+}
+
+func TestApplyTemplate(t *testing.T) {
+	tests := []struct {
+		name     string
+		template interface{}
+		vars     map[string]interface{}
+		check    func(t *testing.T, result interface{})
+	}{
+		{
+			name:     "string variable substitution",
+			template: "$entity",
+			vars:     map[string]interface{}{"$entity": map[string]interface{}{"id": "1"}},
+			check: func(t *testing.T, result interface{}) {
+				m, ok := result.(map[string]interface{})
+				if !ok {
+					t.Fatalf("expected map, got %T", result)
+				}
+				if m["id"] != "1" {
+					t.Errorf("expected id=1, got %v", m["id"])
+				}
+			},
+		},
+		{
+			name:     "inline string substitution",
+			template: "count is $count items",
+			vars:     map[string]interface{}{"$count": 5},
+			check: func(t *testing.T, result interface{}) {
+				s, ok := result.(string)
+				if !ok {
+					t.Fatalf("expected string, got %T", result)
+				}
+				if s != "count is 5 items" {
+					t.Errorf("expected 'count is 5 items', got %q", s)
+				}
+			},
+		},
+		{
+			name:     "no variable match returns original string",
+			template: "no vars here",
+			vars:     map[string]interface{}{"$other": "val"},
+			check: func(t *testing.T, result interface{}) {
+				if result != "no vars here" {
+					t.Errorf("expected original string, got %v", result)
+				}
+			},
+		},
+		{
+			name:     "map template",
+			template: map[string]interface{}{"data": "$entity", "status": "ok"},
+			vars:     map[string]interface{}{"$entity": "resolved"},
+			check: func(t *testing.T, result interface{}) {
+				m, ok := result.(map[string]interface{})
+				if !ok {
+					t.Fatalf("expected map, got %T", result)
+				}
+				if m["data"] != "resolved" {
+					t.Errorf("expected data=resolved, got %v", m["data"])
+				}
+				if m["status"] != "ok" {
+					t.Errorf("expected status=ok, got %v", m["status"])
+				}
+			},
+		},
+		{
+			name:     "array template",
+			template: []interface{}{"$entity", "static"},
+			vars:     map[string]interface{}{"$entity": "resolved"},
+			check: func(t *testing.T, result interface{}) {
+				arr, ok := result.([]interface{})
+				if !ok {
+					t.Fatalf("expected array, got %T", result)
+				}
+				if len(arr) != 2 {
+					t.Fatalf("expected 2 items, got %d", len(arr))
+				}
+				if arr[0] != "resolved" {
+					t.Errorf("expected first item=resolved, got %v", arr[0])
+				}
+			},
+		},
+		{
+			name:     "float64 passthrough",
+			template: float64(42),
+			vars:     map[string]interface{}{},
+			check: func(t *testing.T, result interface{}) {
+				if result != float64(42) {
+					t.Errorf("expected 42.0, got %v", result)
+				}
+			},
+		},
+		{
+			name:     "bool passthrough",
+			template: true,
+			vars:     map[string]interface{}{},
+			check: func(t *testing.T, result interface{}) {
+				if result != true {
+					t.Errorf("expected true, got %v", result)
+				}
+			},
+		},
+		{
+			name:     "nil passthrough",
+			template: nil,
+			vars:     map[string]interface{}{},
+			check: func(t *testing.T, result interface{}) {
+				if result != nil {
+					t.Errorf("expected nil, got %v", result)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := applyTemplate(tt.template, tt.vars)
+			tt.check(t, result)
+		})
+	}
+}
+
+func TestHandleCreate_ValidationError(t *testing.T) {
+	server := setupTestServer(t)
+
+	// Send a number where a string is expected for "name"
+	req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(`{"name": 123}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleUpdate_ValidationError(t *testing.T) {
+	server := setupTestServer(t)
+
+	id, _ := server.store.Create("users", map[string]interface{}{"name": "Alice"})
+
+	// Send wrong type for "name"
+	req := httptest.NewRequest(http.MethodPut, "/users/"+id, strings.NewReader(`{"name": 123}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandlePatch_ValidationError(t *testing.T) {
+	server := setupTestServer(t)
+
+	id, _ := server.store.Create("users", map[string]interface{}{"name": "Alice"})
+
+	// Send wrong type for "age" (string instead of number)
+	req := httptest.NewRequest(http.MethodPatch, "/users/"+id, strings.NewReader(`{"age": "not a number"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleCollection_MethodNotAllowed(t *testing.T) {
+	server := setupTestServer(t)
+
+	req := httptest.NewRequest(http.MethodDelete, "/users", http.NoBody)
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestPaginationMaxLimit(t *testing.T) {
+	schemaJSON := `{
+		"pagination": {
+			"style": "offset",
+			"defaultLimit": 100,
+			"maxLimit": 5
+		},
+		"entities": {
+			"users": {
+				"fields": {
+					"id":   {"type": "string", "required": true},
+					"name": {"type": "string", "required": true}
+				}
+			}
+		}
+	}`
+	srv := setupTestServerWithSchema(t, schemaJSON)
+
+	for i := 0; i < 10; i++ {
+		body := fmt.Sprintf(`{"name": "User%d"}`, i)
+		req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		srv.mux.ServeHTTP(w, req)
+	}
+
+	// Request with limit exceeding maxLimit — should be capped to 5
+	req := httptest.NewRequest(http.MethodGet, "/users?limit=100", http.NoBody)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	data, ok := resp["data"].([]interface{})
+	if !ok {
+		t.Fatalf("expected 'data' array, got: %v", resp)
+	}
+	if len(data) != 5 {
+		t.Errorf("got %d items, want 5 (maxLimit)", len(data))
+	}
+}
+
+func TestPaginationCursorNavigation(t *testing.T) {
+	schemaJSON := `{
+		"pagination": {
+			"style": "cursor",
+			"defaultLimit": 2
+		},
+		"entities": {
+			"users": {
+				"fields": {
+					"id":   {"type": "string", "required": true},
+					"name": {"type": "string", "required": true}
+				}
+			}
+		}
+	}`
+	srv := setupTestServerWithSchema(t, schemaJSON)
+
+	for i := 0; i < 5; i++ {
+		body := fmt.Sprintf(`{"name": "User%d"}`, i)
+		req := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		srv.mux.ServeHTTP(w, req)
+	}
+
+	// First page
+	req := httptest.NewRequest(http.MethodGet, "/users", http.NoBody)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	var page1 map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&page1)
+	meta, _ := page1["meta"].(map[string]interface{})
+	nextToken, _ := meta["next_token"].(string)
+
+	if nextToken == "" {
+		t.Fatal("expected next_token in first page")
+	}
+
+	// Second page using cursor
+	req2 := httptest.NewRequest(http.MethodGet, "/users?cursor="+nextToken, http.NoBody)
+	w2 := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w2.Code, http.StatusOK)
+	}
+}
+
+func TestRespondList_NoPagination(t *testing.T) {
+	// Server with no pagination config returns raw array
+	schemaJSON := `{
+		"entities": {
+			"users": {
+				"fields": {
+					"id":   {"type": "string", "required": true},
+					"name": {"type": "string", "required": true}
+				}
+			}
+		}
+	}`
+	srv := setupTestServerWithSchema(t, schemaJSON)
+
+	srv.store.Create("users", map[string]interface{}{"name": "Alice"})
+	srv.store.Create("users", map[string]interface{}{"name": "Bob"})
+
+	req := httptest.NewRequest(http.MethodGet, "/users", http.NoBody)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	// Should return plain array, not wrapped
+	var response []map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("expected plain array response, got error: %v", err)
+	}
+	if len(response) != 2 {
+		t.Errorf("got %d items, want 2", len(response))
+	}
+}
+
+func TestConvertPathParams(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"/users/:userId/tweets", "/users/{userId}/tweets"},
+		{"/users/me", "/users/me"},
+		{"/:a/:b/:c", "/{a}/{b}/{c}"},
+		{"/no/params", "/no/params"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := convertPathParams(tt.input)
+			if got != tt.want {
+				t.Errorf("convertPathParams(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractParamNames(t *testing.T) {
+	tests := []struct {
+		path string
+		want []string
+	}{
+		{"/users/:userId/tweets", []string{"userId"}},
+		{"/users/me", nil},
+		{"/:a/:b", []string{"a", "b"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			got := extractParamNames(tt.path)
+			if len(got) != len(tt.want) {
+				t.Errorf("extractParamNames(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRespondError(t *testing.T) {
 	server := setupTestServer(t)
 
@@ -952,5 +1311,191 @@ func TestRespondError(t *testing.T) {
 	}
 	if !strings.Contains(body, "error") {
 		t.Errorf("body = %s, want to contain 'error' key", body)
+	}
+}
+
+// setupMismatchedServer creates a server where "ghost" entity exists in the schema and routes
+// but not in storage, allowing us to test ErrEntityTypeNotFound error paths inside handlers.
+func setupMismatchedServer(t *testing.T) *Server {
+	schemaJSON := `{
+		"entities": {
+			"users": {
+				"fields": {
+					"id":    {"type": "string", "required": true},
+					"name":  {"type": "string", "required": true},
+					"email": {"type": "string", "required": false}
+				}
+			},
+			"ghost": {
+				"fields": {
+					"id":   {"type": "string", "required": true},
+					"name": {"type": "string", "required": true}
+				}
+			}
+		}
+	}`
+
+	tmpFile := t.TempDir() + "/mismatch-schema.json"
+	if err := os.WriteFile(tmpFile, []byte(schemaJSON), 0o644); err != nil {
+		t.Fatalf("failed to write schema: %v", err)
+	}
+	loader := schema.NewLoader()
+	if err := loader.LoadFromFile(tmpFile); err != nil {
+		t.Fatalf("failed to load schema: %v", err)
+	}
+
+	store := storage.NewInMemoryStore()
+	store.Initialize([]string{"users"}) // Only initialize "users", not "ghost"
+
+	routeMap := schema.RouteMap{
+		"users": {EntityName: "users", CollectionPath: "/users", ItemPath: "/users/{id}"},
+		"ghost": {EntityName: "ghost", CollectionPath: "/ghost", ItemPath: "/ghost/{id}"},
+	}
+
+	srv := New(8080, store, routeMap, loader)
+	srv.RegisterRoutes()
+	return srv
+}
+
+func TestHandleCreate_EntityTypeNotFound(t *testing.T) {
+	srv := setupMismatchedServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/ghost", strings.NewReader(`{"name": "test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	// Entity passes validation (ghost is in schema) but store returns ErrEntityTypeNotFound
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d, body: %s", w.Code, http.StatusNotFound, w.Body.String())
+	}
+}
+
+func TestHandleList_EntityTypeNotFound(t *testing.T) {
+	srv := setupMismatchedServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/ghost", http.NoBody)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleGetOne_EntityTypeNotFound(t *testing.T) {
+	srv := setupMismatchedServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/ghost/1", http.NoBody)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleUpdate_EntityTypeNotFound(t *testing.T) {
+	srv := setupMismatchedServer(t)
+
+	req := httptest.NewRequest(http.MethodPut, "/ghost/1", strings.NewReader(`{"name": "test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	// Ghost passes validation (in schema) but store returns ErrEntityTypeNotFound
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d, body: %s", w.Code, http.StatusNotFound, w.Body.String())
+	}
+}
+
+func TestHandlePatch_EntityTypeNotFound(t *testing.T) {
+	srv := setupMismatchedServer(t)
+
+	req := httptest.NewRequest(http.MethodPatch, "/ghost/1", strings.NewReader(`{"name": "test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	// Ghost passes validation (in schema) but store returns ErrEntityTypeNotFound
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d, body: %s", w.Code, http.StatusNotFound, w.Body.String())
+	}
+}
+
+func TestHandleDelete_EntityTypeNotFound(t *testing.T) {
+	srv := setupMismatchedServer(t)
+
+	req := httptest.NewRequest(http.MethodDelete, "/ghost/1", http.NoBody)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestValidateUpdate_UnknownEntity(t *testing.T) {
+	loader := setupTestSchema(t)
+	v := NewValidator(loader)
+
+	err := v.ValidateUpdate("nonexistent", map[string]interface{}{"name": "test"})
+	if err == nil {
+		t.Error("expected error for unknown entity type")
+	}
+}
+
+func TestValidatePatch_UnknownEntity(t *testing.T) {
+	loader := setupTestSchema(t)
+	v := NewValidator(loader)
+
+	err := v.ValidatePatch("nonexistent", map[string]interface{}{"name": "test"})
+	if err == nil {
+		t.Error("expected error for unknown entity type")
+	}
+}
+
+func TestStartAndShutdown(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	store.Initialize([]string{"users"})
+
+	routeMap := schema.RouteMap{
+		"users": {EntityName: "users", CollectionPath: "/users", ItemPath: "/users/{id}"},
+	}
+
+	loader := setupTestSchema(t)
+	srv := New(0, store, routeMap, loader) // port 0 = random available port
+	srv.RegisterRoutes()
+
+	// Start in background
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.Start()
+	}()
+
+	// Wait briefly for the server to initialize
+	time.Sleep(50 * time.Millisecond)
+
+	ctx := context.Background()
+	if err := srv.Shutdown(ctx); err != nil {
+		t.Errorf("Shutdown() error = %v", err)
+	}
+
+	// Start should return nil (ErrServerClosed is swallowed)
+	if err := <-errCh; err != nil {
+		t.Errorf("Start() error = %v", err)
+	}
+}
+
+func TestShutdown_NilServer(t *testing.T) {
+	store := storage.NewInMemoryStore()
+	routeMap := schema.RouteMap{}
+	loader := schema.NewLoader()
+	srv := New(8080, store, routeMap, loader)
+
+	// Shutdown without ever starting — should be a no-op
+	ctx := context.Background()
+	if err := srv.Shutdown(ctx); err != nil {
+		t.Errorf("Shutdown() error = %v", err)
 	}
 }
