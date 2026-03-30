@@ -152,39 +152,38 @@ func (s *Server) buildQueryOpts(entityName string, r *http.Request) types.QueryO
 
 	// Extract pagination params
 	if s.schema != nil && s.schema.Pagination != nil {
-		pagConfig := s.schema.Pagination
-
-		// Set default limit
-		opts.Limit = pagConfig.DefaultLimit
-		if opts.Limit == 0 {
-			opts.Limit = 20 // fallback default
-		}
-
-		// Parse limit from query
-		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-			if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
-				opts.Limit = limit
-			}
-		}
-
-		// Cap at max limit
-		if pagConfig.MaxLimit > 0 && opts.Limit > pagConfig.MaxLimit {
-			opts.Limit = pagConfig.MaxLimit
-		}
-
-		// Parse style-specific params
-		if pagConfig.Style == "cursor" {
-			opts.Cursor = r.URL.Query().Get("cursor")
-		} else {
-			if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-				if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
-					opts.Offset = offset
-				}
-			}
-		}
+		parsePaginationOpts(&opts, s.schema.Pagination, r)
 	}
 
 	return opts
+}
+
+// parsePaginationOpts extracts limit, offset, and cursor params from the request
+func parsePaginationOpts(opts *types.QueryOpts, pagConfig *types.PaginationConfig, r *http.Request) {
+	opts.Limit = pagConfig.DefaultLimit
+	if opts.Limit == 0 {
+		opts.Limit = 20 // fallback default
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			opts.Limit = limit
+		}
+	}
+
+	if pagConfig.MaxLimit > 0 && opts.Limit > pagConfig.MaxLimit {
+		opts.Limit = pagConfig.MaxLimit
+	}
+
+	if pagConfig.Style == "cursor" {
+		opts.Cursor = r.URL.Query().Get("cursor")
+	} else {
+		if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+			if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
+				opts.Offset = offset
+			}
+		}
+	}
 }
 
 // getEntityFieldNames returns a set of valid field names for an entity

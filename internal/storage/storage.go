@@ -172,40 +172,8 @@ func (s *InMemoryStore) ListQuery(entityType string, opts types.QueryOpts) (*typ
 
 	totalCount := len(filtered)
 
-	// Apply cursor-based pagination: skip to after the cursor ID
-	if opts.Cursor != "" {
-		cursorIndex := -1
-		for i, item := range filtered {
-			if idVal, ok := item["id"].(string); ok && idVal == opts.Cursor {
-				cursorIndex = i
-				break
-			}
-		}
-		if cursorIndex >= 0 && cursorIndex+1 < len(filtered) {
-			filtered = filtered[cursorIndex+1:]
-		} else {
-			filtered = nil
-		}
-	} else if opts.Offset > 0 {
-		// Apply offset-based pagination
-		if opts.Offset >= len(filtered) {
-			filtered = nil
-		} else {
-			filtered = filtered[opts.Offset:]
-		}
-	}
-
-	// Apply limit
-	var nextCursor string
-	if opts.Limit > 0 && len(filtered) > opts.Limit {
-		// There are more results; set next cursor to last returned item's ID
-		filtered = filtered[:opts.Limit]
-		if lastItem := filtered[len(filtered)-1]; lastItem != nil {
-			if id, ok := lastItem["id"].(string); ok {
-				nextCursor = id
-			}
-		}
-	}
+	filtered = applyPagination(filtered, opts)
+	filtered, nextCursor := applyLimit(filtered, opts.Limit)
 
 	if filtered == nil {
 		filtered = []map[string]interface{}{}
@@ -216,6 +184,46 @@ func (s *InMemoryStore) ListQuery(entityType string, opts types.QueryOpts) (*typ
 		TotalCount: totalCount,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// applyPagination applies cursor or offset pagination to a slice of entities
+func applyPagination(items []map[string]interface{}, opts types.QueryOpts) []map[string]interface{} {
+	if opts.Cursor != "" {
+		cursorIndex := -1
+		for i, item := range items {
+			if idVal, ok := item["id"].(string); ok && idVal == opts.Cursor {
+				cursorIndex = i
+				break
+			}
+		}
+		if cursorIndex >= 0 && cursorIndex+1 < len(items) {
+			return items[cursorIndex+1:]
+		}
+		return nil
+	}
+
+	if opts.Offset > 0 {
+		if opts.Offset >= len(items) {
+			return nil
+		}
+		return items[opts.Offset:]
+	}
+
+	return items
+}
+
+// applyLimit truncates items to the given limit and returns the truncated slice and next cursor ID
+func applyLimit(items []map[string]interface{}, limit int) ([]map[string]interface{}, string) {
+	if limit <= 0 || len(items) <= limit {
+		return items, ""
+	}
+	truncated := items[:limit]
+	if lastItem := truncated[len(truncated)-1]; lastItem != nil {
+		if id, ok := lastItem["id"].(string); ok {
+			return truncated, id
+		}
+	}
+	return truncated, ""
 }
 
 // matchesFilters checks if an entity matches all filter criteria (AND logic)
