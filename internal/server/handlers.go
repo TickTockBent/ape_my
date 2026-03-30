@@ -64,9 +64,13 @@ func (s *Server) handleItem(entityName, collectionPath string) http.HandlerFunc 
 	}
 }
 
+// maxRequestBodySize is the maximum allowed request body size (1MB)
+const maxRequestBodySize = 1 << 20
+
 // handleCreate handles POST /entities - Create new entity
 func (s *Server) handleCreate(entityName string, w http.ResponseWriter, r *http.Request) {
 	// Parse request body
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		s.respondError(w, http.StatusBadRequest, "Failed to read request body")
@@ -221,6 +225,7 @@ func (s *Server) handleGetOne(entityName, id string, w http.ResponseWriter, r *h
 // handleUpdate handles PUT /entities/{id} - Replace entire entity
 func (s *Server) handleUpdate(entityName string, id string, w http.ResponseWriter, r *http.Request) {
 	// Parse request body
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		s.respondError(w, http.StatusBadRequest, "Failed to read request body")
@@ -269,6 +274,7 @@ func (s *Server) handleUpdate(entityName string, id string, w http.ResponseWrite
 // handlePatch handles PATCH /entities/{id} - Partially update entity
 func (s *Server) handlePatch(entityName string, id string, w http.ResponseWriter, r *http.Request) {
 	// Parse request body
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		s.respondError(w, http.StatusBadRequest, "Failed to read request body")

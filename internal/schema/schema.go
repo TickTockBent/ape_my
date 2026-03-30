@@ -214,7 +214,7 @@ func (l *Loader) validateEntityData(entityName string, entity *types.Entity, dat
 		}
 	}
 
-	// Validate field types (basic validation)
+	// Validate field types
 	for fieldName, value := range data {
 		// Check if field exists in schema
 		field, exists := entity.Fields[fieldName]
@@ -223,42 +223,8 @@ func (l *Loader) validateEntityData(entityName string, entity *types.Entity, dat
 			continue
 		}
 
-		// Basic type checking
-		if err := validateFieldValue(field.Type, value); err != nil {
+		if err := types.ValidateFieldType(field.Type, value); err != nil {
 			return fmt.Errorf("field %q: %w", fieldName, err)
-		}
-	}
-
-	return nil
-}
-
-// validateFieldValue performs basic type validation on a field value
-func validateFieldValue(fieldType string, value interface{}) error {
-	if value == nil {
-		return nil // Allow null values
-	}
-
-	switch fieldType {
-	case types.FieldTypeString:
-		if _, ok := value.(string); !ok {
-			return fmt.Errorf("expected string, got %T", value)
-		}
-	case types.FieldTypeNumber:
-		// JSON numbers can be float64
-		if _, ok := value.(float64); !ok {
-			return fmt.Errorf("expected number, got %T", value)
-		}
-	case types.FieldTypeBoolean:
-		if _, ok := value.(bool); !ok {
-			return fmt.Errorf("expected boolean, got %T", value)
-		}
-	case types.FieldTypeObject:
-		if _, ok := value.(map[string]interface{}); !ok {
-			return fmt.Errorf("expected object, got %T", value)
-		}
-	case types.FieldTypeArray:
-		if _, ok := value.([]interface{}); !ok {
-			return fmt.Errorf("expected array, got %T", value)
 		}
 	}
 

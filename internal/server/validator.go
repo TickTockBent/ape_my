@@ -83,44 +83,9 @@ func (v *Validator) validateEntityData(entity *types.Entity, data map[string]int
 		}
 
 		// Validate type
-		if err := validateFieldType(field.Type, value); err != nil {
+		if err := types.ValidateFieldType(field.Type, value); err != nil {
 			return fmt.Errorf("field %q: %w", fieldName, err)
 		}
-	}
-
-	return nil
-}
-
-// validateFieldType validates that a value matches the expected type
-func validateFieldType(expectedType string, value interface{}) error {
-	if value == nil {
-		return nil // Allow null values
-	}
-
-	switch expectedType {
-	case types.FieldTypeString:
-		if _, ok := value.(string); !ok {
-			return fmt.Errorf("expected string, got %T", value)
-		}
-	case types.FieldTypeNumber:
-		// JSON numbers are float64
-		if _, ok := value.(float64); !ok {
-			return fmt.Errorf("expected number, got %T", value)
-		}
-	case types.FieldTypeBoolean:
-		if _, ok := value.(bool); !ok {
-			return fmt.Errorf("expected boolean, got %T", value)
-		}
-	case types.FieldTypeObject:
-		if _, ok := value.(map[string]interface{}); !ok {
-			return fmt.Errorf("expected object, got %T", value)
-		}
-	case types.FieldTypeArray:
-		if _, ok := value.([]interface{}); !ok {
-			return fmt.Errorf("expected array, got %T", value)
-		}
-	default:
-		return fmt.Errorf("unknown field type: %s", expectedType)
 	}
 
 	return nil
