@@ -4,13 +4,13 @@ import "fmt"
 
 // Schema represents the entire schema definition
 type Schema struct {
-	BasePath        string                `json:"basePath,omitempty"`
-	Entities        map[string]*Entity    `json:"entities"`
-	ResponseHeaders map[string]string     `json:"responseHeaders,omitempty"`
-	Auth            *AuthConfig           `json:"auth,omitempty"`
+	BasePath        string                 `json:"basePath,omitempty"`
+	Entities        map[string]*Entity     `json:"entities"`
+	ResponseHeaders map[string]string      `json:"responseHeaders,omitempty"`
+	Auth            *AuthConfig            `json:"auth,omitempty"`
 	ResponseWrapper *ResponseWrapperConfig `json:"responseWrapper,omitempty"`
-	Pagination      *PaginationConfig     `json:"pagination,omitempty"`
-	Routes          []*CustomRoute        `json:"routes,omitempty"`
+	Pagination      *PaginationConfig      `json:"pagination,omitempty"`
+	Routes          []*CustomRoute         `json:"routes,omitempty"`
 }
 
 // AuthConfig defines bearer token authentication settings
@@ -26,7 +26,7 @@ type ResponseWrapperConfig struct {
 
 // PaginationConfig defines pagination behavior
 type PaginationConfig struct {
-	Style        string `json:"style"`                  // "cursor" or "offset"
+	Style        string `json:"style"` // "cursor" or "offset"
 	DefaultLimit int    `json:"defaultLimit,omitempty"`
 	MaxLimit     int    `json:"maxLimit,omitempty"`
 }
